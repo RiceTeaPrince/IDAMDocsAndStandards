@@ -2,12 +2,16 @@
 
 ## Overview
 
-The CA naming convention is structured like a database row written as a string. Every hyphen is a column delimiter — the goal is to make that structure explicit in a spreadsheet, then pivot off those columns to generate insights.
+A well-structured CA naming convention can be treated like a database row written as a string. If each segment of the policy name is separated by a consistent delimiter (e.g. a hyphen), those segments can be split into individual columns and used as the basis for pivot analysis.
+
+The example below illustrates a typical structured naming convention with six segments:
 
 ```
-CA104-Admins-AttackSurfaceReduction-AllApps-AnyPlatform-BlockFromUntrustedCountries
- [1]    [2]          [3]               [4]       [5]                [6]
+CA104-Persona-PolicyType-Resource-Platform-GrantControl
+ [1]    [2]       [3]       [4]      [5]         [6]
 ```
+
+The exact segment names and values will vary depending on your organisation's CA naming standard. Adapt the steps below to match your convention.
 
 ---
 
@@ -21,9 +25,9 @@ You have two options depending on timing.
 2. Click the **Download** button in the top-right
 3. This exports a CSV with policy names and states — enough to start
 
-**Option B — Later (once Microsoft.Graph is installed on RDFarm):**
+**Option B — Later (once Microsoft.Graph is installed on your admin workstation):**
 
-Run the following PowerShell export from RDFarm. This produces a much richer dataset including inclusions, exclusions, grant controls, and apps — and will produce significantly more insightful analysis.
+Run the following PowerShell export from your admin workstation. This produces a much richer dataset including inclusions, exclusions, grant controls, and apps — and will produce significantly more insightful analysis.
 
 ```powershell
 Connect-MgGraph -Scopes "Policy.Read.All", "Directory.Read.All"
@@ -48,7 +52,7 @@ $report | Export-Csv -Path "C:\Reports\CA_Policy_Inventory.csv" -NoTypeInformati
 Write-Host "Exported $($report.Count) policies"
 ```
 
-> **Recommendation:** If you can wait for the Graph module to be installed via ServiceNow CR, do so. The richer export will save you significant manual effort.
+> **Recommendation:** If you can wait for the Graph module to be installed via your change management process, do so. The richer export will save you significant manual effort.
 
 ---
 
@@ -58,20 +62,20 @@ Once your raw data is in Excel:
 
 1. Paste the policy names into **Column A**
 2. Select Column A
-3. Go to **Data → Text to Columns → Delimited → Hyphen**
+3. Go to **Data → Text to Columns → Delimited → Hyphen** (or whichever delimiter your convention uses)
 4. Split into columns B onwards
 
-This gives you the following column structure:
+This gives you the following column structure, using a hyphen-delimited six-segment convention as an example:
 
 | Column | Content | Example |
 |---|---|---|
-| A | Full policy name (raw) | `CA104-Admins-AttackSurfaceReduction-AllApps-AnyPlatform-Block...` |
+| A | Full policy name (raw) | `CA104-Persona-PolicyType-Resource-Platform-GrantControl` |
 | B | CA Number | `CA104` |
-| C | Persona | `Admins` |
-| D | Policy Type | `AttackSurfaceReduction` |
-| E | Resource | `AllApps` |
-| F | Platform | `AnyPlatform` |
-| G | Grant Control | `BlockFromUntrustedCountries` |
+| C | Persona | `Persona` |
+| D | Policy Type | `PolicyType` |
+| E | Resource | `Resource` |
+| F | Platform | `Platform` |
+| G | Grant Control | `GrantControl` |
 | H | Optional Description | *(seventh segment if present)* |
 | I | State | `enabled` / `enabledForReportingButNotEnforced` / `disabled` |
 
@@ -79,23 +83,22 @@ This gives you the following column structure:
 
 ## Step 3 — Add the Persona Range Column
 
-Add **Column J — Persona Range** using the following formula. This maps the CA number back to its named range bucket, giving you a clean filterable label rather than just a number.
+If your CA numbering convention uses numeric ranges to represent different personas (e.g. CA001–CA099 for one group, CA100–CA199 for another), add **Column J — Persona Range** using the following formula pattern.
+
+This maps the CA number back to its named range bucket, giving you a clean filterable label rather than just a number. Replace the threshold values and labels with those defined in your own naming convention.
 
 ```excel
 =IFS(
-  VALUE(MID(B2,3,LEN(B2)))<=99,   "Global",
-  VALUE(MID(B2,3,LEN(B2)))<=199,  "Admins",
-  VALUE(MID(B2,3,LEN(B2)))<=299,  "Internals",
-  VALUE(MID(B2,3,LEN(B2)))<=399,  "Externals",
-  VALUE(MID(B2,3,LEN(B2)))<=499,  "Guests",
-  VALUE(MID(B2,3,LEN(B2)))<=599,  "Guest Admins",
-  VALUE(MID(B2,3,LEN(B2)))<=699,  "M365 Service Accounts",
-  VALUE(MID(B2,3,LEN(B2)))<=799,  "Azure Service Accounts",
-  VALUE(MID(B2,3,LEN(B2)))<=899,  "Corp Service Accounts",
-  VALUE(MID(B2,3,LEN(B2)))<=999,  "Workload Identities",
-  TRUE,                             "Developer"
+  VALUE(MID(B2,3,LEN(B2)))<=99,   "PersonaGroup1",
+  VALUE(MID(B2,3,LEN(B2)))<=199,  "PersonaGroup2",
+  VALUE(MID(B2,3,LEN(B2)))<=299,  "PersonaGroup3",
+  VALUE(MID(B2,3,LEN(B2)))<=399,  "PersonaGroup4",
+  VALUE(MID(B2,3,LEN(B2)))<=499,  "PersonaGroup5",
+  TRUE,                             "Other"
 )
 ```
+
+> The `MID(B2,3,LEN(B2))` portion strips the `CA` prefix from the policy number before evaluating it numerically. Adjust the prefix length if your convention uses a different prefix.
 
 ---
 
@@ -131,7 +134,7 @@ Immediately shows which personas have zero enforced policies — that is your ga
 - **Columns:** State (Column I)
 - **Values:** Count of policy names
 
-Shows whether entire categories of protection (e.g. IdentityProtection, BaseProtection) are unenforced across the environment.
+Shows whether entire categories of protection are unenforced across the environment. For example, if your convention includes policy types such as baseline protection or identity protection, this view will reveal if any of those categories exist only in report-only state.
 
 ### Sheet 4 — Grant Control Summary
 
@@ -139,35 +142,32 @@ Shows whether entire categories of protection (e.g. IdentityProtection, BaseProt
 - **Columns:** Persona Range (Column J)
 - **Values:** Count of policy names
 
-Answers the question: which personas have Block policies vs MFA policies vs nothing at all?
+Answers the question: which personas have block policies vs MFA policies vs nothing at all?
 
 ### Sheet 5 — Report-Only Candidates
 
 - Filter: State = `enabledForReportingButNotEnforced`
 - Sort by: Persona Range (Column J)
 
-This becomes your CAB submission planning list. Work through it top to bottom, reviewing sign-in logs for each policy before submitting to CAB.
+This becomes your change management planning list. Work through it top to bottom, reviewing sign-in logs for each policy before submitting for approval.
 
 ---
 
 ## The Key Output — Coverage Matrix
 
-The single most important view produced by Sheet 2 is a matrix like this. This is what you take to your manager and to CAB.
+The single most important view produced by Sheet 2 is a coverage matrix. Populate it with your own persona range names and the results from your pivot. The goal is to make gaps immediately visible at a glance.
 
 ```
-Persona Range          | Enforced | Report-Only | Disabled | COVERED?
------------------------|----------|-------------|----------|--------------------
-Global                 |    ✓     |      ✓      |          | YES
-Admins                 |    ✓     |      ✓      |          | YES
-Internals              |    ✓     |      ✓      |          | YES
-Externals              |          |      ✓      |          | GAP — report-only only
-Guests                 |          |             |    ✓     | GAP — nothing enforced
-M365 Service Accounts  |    ✓     |             |          | YES
-Azure Service Accounts |          |             |          | GAP — no policies at all
-Corp Service Accounts  |          |      ✓      |          | GAP — report-only only
-Workload Identities    |          |             |          | GAP — no policies at all
-Developer              |    ✓     |             |          | YES
+Persona Range   | Enforced | Report-Only | Disabled | COVERED?
+----------------|----------|-------------|----------|--------------------
+PersonaGroup1   |    ✓     |      ✓      |          | YES
+PersonaGroup2   |    ✓     |      ✓      |          | YES
+PersonaGroup3   |          |      ✓      |          | GAP — report-only only
+PersonaGroup4   |          |             |    ✓     | GAP — nothing enforced
+PersonaGroup5   |          |             |          | GAP — no policies at all
 ```
+
+This matrix is what you take to your manager and to your change advisory process. It is clear, defensible, and shows exactly where you are starting from and what needs to move.
 
 ---
 
